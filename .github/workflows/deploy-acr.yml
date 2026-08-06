@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 env:
-  REGISTRY_NAME: your-acr-name
+  REGISTRY_NAME: ${{ secrets.ACR_NAME }}
   IMAGE_NAME: devops-aimonitor
   IMAGE_TAG: latest
 
