@@ -21,6 +21,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify required Azure secrets
+        run: |
+          if [ -z "${{ secrets.AZURE_CLIENT_ID }}" ]; then echo "AZURE_CLIENT_ID is missing"; exit 1; fi
+          if [ -z "${{ secrets.AZURE_TENANT_ID }}" ]; then echo "AZURE_TENANT_ID is missing"; exit 1; fi
+          if [ -z "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then echo "AZURE_SUBSCRIPTION_ID is missing"; exit 1; fi
+          if [ -z "${{ secrets.ACR_NAME }}" ]; then echo "ACR_NAME is missing"; exit 1; fi
+          if [ -z "${{ secrets.AZURE_RESOURCE_GROUP }}" ]; then echo "AZURE_RESOURCE_GROUP is missing"; exit 1; fi
+
       - name: Log in to Azure
         uses: azure/login@v2
         with:
