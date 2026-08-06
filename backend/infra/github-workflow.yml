@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+      - name: Restore backend
+        run: |
+          cd backend/DevOpsAIMonitor.Api
+          dotnet restore
+      - name: Build backend
+        run: |
+          cd backend/DevOpsAIMonitor.Api
+          dotnet build --configuration Release --no-restore
