@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
   id-token: write
+  contents: read
 
 env:
   ACR_NAME: ${{ secrets.ACR_NAME }}
@@ -16,33 +16,43 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and Push Image
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source
+      # Checkout source code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Azure Login (OIDC)
+      # Verify required GitHub secrets exist
+      - name: Verify GitHub Secrets
+        shell: bash
+        run: |
+          [ -n "${{ secrets.AZURE_CLIENT_ID }}" ] || { echo "AZURE_CLIENT_ID is missing"; exit 1; }
+          [ -n "${{ secrets.AZURE_TENANT_ID }}" ] || { echo "AZURE_TENANT_ID is missing"; exit 1; }
+          [ -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ] || { echo "AZURE_SUBSCRIPTION_ID is missing"; exit 1; }
+          [ -n "${{ secrets.ACR_NAME }}" ] || { echo "ACR_NAME is missing"; exit 1; }
+
+      # Login to Azure using OIDC
+      - name: Azure Login
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Verify Azure CLI
+      # Verify Azure Login
+      - name: Verify Azure Login
         run: |
           az account show
           az acr show --name ${{ env.ACR_NAME }}
 
+      # Login to ACR
       - name: Login to Azure Container Registry
         run: |
-          TOKEN=$(az acr login --name ${{ env.ACR_NAME }} --expose-token --output tsv --query accessToken)
-          echo $TOKEN | docker login ${{ env.ACR_NAME }}.azurecr.io \
-            --username 00000000-0000-0000-0000-000000000000 \
-            --password-stdin
+          az acr login --name ${{ env.ACR_NAME }}
 
-      - name: Build Docker image
+      # Build Docker image
+      - name: Build Docker Image
         run: |
           docker build \
             -f backend/DevOpsAIMonitor.Api/Dockerfile \
@@ -50,10 +60,23 @@ jobs:
             -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest \
             .
 
-      - name: Push Docker image
+      # Push SHA tag
+      - name: Push SHA Image
         run: |
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      # Push latest tag
+      - name: Push Latest Image
+        run: |
           docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
 
-      - name: Logout
+      # Display pushed image
+      - name: Display Image
+        run: |
+          echo "Image pushed successfully:"
+          echo "${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest"
+
+      # Logout
+      - name: Docker Logout
         run: docker logout ${{ env.ACR_NAME }}.azurecr.io
