@@ -1,0 +1,130 @@
+                 ┌──────────────┐
+                 │ Code pushed  │
+                 │ to main      │
+                 └──────┬───────┘
+                        ↓
+                 Deploy App
+                        ↓
+                 Health Check
+                        ↓
+                 ┌──────┴──────┐
+                 │             │
+              HTTP 200      HTTP != 200
+                 │             │
+                 ↓             ↓
+              SUCCESS       Restart
+                               │
+                               ↓
+                         Wait 30 seconds
+                               │
+                               ↓
+                         Health Check
+                               │
+                      ┌────────┴────────┐
+                      │                 │
+                   Healthy           Unhealthy
+                      │                 │
+                      ↓                 ↓
+              SELF-HEALED          Escalate
+                                        │
+                                        ↓
+                                  Rollback / Human
+
+========================================================================================
+Helathcheck Yaml file
+=========================================================================================
+
+    - bash: |
+    echo "Checking application health..."
+
+    for i in {1..5}; do
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" "$(healthUrl)")
+      echo "Attempt $i: HTTP $CODE"
+
+      if [ "$CODE" = "200" ]; then
+        echo "Application is healthy."
+        exit 0
+      fi
+
+      sleep 10
+    done
+
+    echo "Health check failed."
+    exit 1
+  displayName: 'Health Check'
+
+
+  ==============================================================================
+  Self Healing
+  ===============================================================================
+- task: AzureCLI@2
+  displayName: 'Self-Healing - Restart'
+  condition: failed()
+  inputs:
+    azureSubscription: '$(azureServiceConnection)'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      echo "Attempting automatic recovery..."
+      
+      az webapp restart \
+        --resource-group "$(resourceGroup)" \
+        --name "$(appName)"
+
+# Validate recovery
+- bash: |
+    echo "Validating recovery..."
+
+    sleep 30
+
+    for i in {1..5}; do
+      CODE=$(curl -s -o /dev/null -w "%{http_code}" "$(healthUrl)")
+      echo "Recovery check $i: HTTP $CODE"
+
+      if [ "$CODE" = "200" ]; then
+        echo "SELF-HEALING SUCCESSFUL"
+        exit 0
+      fi
+
+      sleep 10
+    done
+
+    echo "Self-healing failed."
+    exit 1
+  displayName: 'Validate Self-Healing'
+  condition: failed()
+
+# Rollback / alert
+- bash: |
+    echo "======================================"
+    echo "SELF-HEALING FAILED"
+    echo "Rollback or manual intervention required."
+    echo "======================================"
+    exit 1
+  displayName: 'Escalate / Rollback'
+  condition: failed()
+
+
+================================================================
+Create a selh healing url
+===============================================================
+ASP.NET Core
+In Program.cs
+
+var builder = WebApplication.CreateBuilder(args);
+
+var app = builder.Build();
+
+app.MapGet("/health", () =>
+{
+    return Results.Ok(new
+    {
+        status = "healthy"
+    });
+});
+
+app.Run();
+
+Once you deploy this will be your url.
+
+https://YOUR-APP-NAME.azurewebsites.net/health
